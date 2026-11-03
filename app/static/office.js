@@ -433,6 +433,10 @@
       if (age > 600 || (finished && age > 20)) setState(name, "idle", "", "", { log: false });
       else handle(e, false);
     }
+    // Specialists still busy means the chief is still waiting on them.
+    active.clear();
+    for (const [name, a] of Object.entries(agents)) if (name !== "chief" && a.state === "working") active.add(name);
+    if (active.size) chiefWaiting();
     updateStats(snap.stats);
   }
 
