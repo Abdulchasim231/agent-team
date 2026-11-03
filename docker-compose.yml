@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    env_file: .env
+    environment:
+      # Reach Ollama running on the host machine (Windows/macOS Docker Desktop).
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    volumes:
+      - ./workspace:/app/workspace
+      - ./data:/app/data
+      - ./agents.yaml:/app/agents.yaml
