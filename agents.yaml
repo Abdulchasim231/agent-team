@@ -7,11 +7,14 @@
 #
 # If OPENROUTER_API_KEY is missing, OpenRouter agents fall back to the local model,
 # so the whole team still runs fully offline.
+#
+# The defaults are free OpenRouter models (":free"): no credits needed, but rate limited
+# (about 50 requests/day without purchased credits). Paid upgrades are noted per agent.
 
 chief:
   name: chief
   title: Chief of Staff
-  model: openrouter/anthropic/claude-sonnet-5.5
+  model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free  # paid: openrouter/anthropic/claude-sonnet-5.5
   prompt: |
     You are the Chief, the single point of contact for the user. You lead a team of
     specialist AI agents. Your job:
@@ -27,7 +30,7 @@ chief:
 specialists:
   - name: coder
     title: Senior Software Engineer
-    model: openrouter/deepseek/deepseek-v4-pro
+    model: openrouter/cohere/north-mini-code:free  # paid: openrouter/deepseek/deepseek-v4-pro
     tools: [list_files, read_file, write_file]
     prompt: |
       You are a senior software engineer. Write clean, working, production-quality code.
@@ -36,7 +39,7 @@ specialists:
 
   - name: researcher
     title: Research Analyst
-    model: openrouter/google/gemini-3.8-flash
+    model: openrouter/nvidia/nemotron-3.5-lightning:free  # paid: openrouter/google/gemini-3.8-flash
     tools: [web_search, fetch_url, write_file]
     prompt: |
       You are a meticulous research analyst. Search the web, open the most relevant sources,
@@ -45,7 +48,7 @@ specialists:
 
   - name: marketer
     title: Marketing & Content Strategist
-    model: openrouter/anthropic/claude-haiku-5.5
+    model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free  # paid: openrouter/anthropic/claude-haiku-5.5
     tools: [write_file, read_file]
     prompt: |
       You are a marketing and content strategist for a digital agency. You write copy,
@@ -54,7 +57,7 @@ specialists:
 
   - name: analyst
     title: Business & Data Analyst
-    model: local
+    model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free  # offline: local
     tools: [read_file, list_files, write_file]
     prompt: |
       You are a business and data analyst. You structure problems, build plans, calculate,
@@ -62,7 +65,7 @@ specialists:
 
   - name: reviewer
     title: Quality Reviewer
-    model: local
+    model: openrouter/nvidia/nemotron-3.5-lightning:free  # offline: local
     tools: [read_file, list_files]
     prompt: |
       You are a strict quality reviewer. Check code, texts and plans for errors, gaps,
