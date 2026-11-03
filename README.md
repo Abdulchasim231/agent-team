@@ -42,6 +42,16 @@ uv run uvicorn app.main:create_app --factory --reload --port 8000
 
 Open http://localhost:8000.
 
+## Choosing local models
+
+Agents send long prompts plus tool definitions, so the local model needs:
+
+- **Enough RAM/VRAM.** A model must fit in memory, with room to spare. On a 16 GB laptop without a dedicated GPU, use a 4B–8B model (`qwen3:4b`, `qwen3:8b`). Larger models swap to disk and slow to a crawl.
+- **Tool-calling support.** Qwen3, Llama 3.1+ and Mistral models work.
+- **A bigger context window.** Ollama defaults to 4096 tokens, which truncates agent prompts. Set `OLLAMA_CONTEXT_LENGTH=16384` as a system environment variable and restart Ollama.
+
+A practical mix: run the Chief and the heavy specialists on OpenRouter, and keep the analyst and reviewer on a small local model.
+
 ## API
 
 | Method | Path | Purpose |
