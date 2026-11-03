@@ -47,6 +47,104 @@
   .ev.error { border-color: var(--err); }
   .ev.tool, .ev.thought { color: var(--muted); }
   .ev details summary { cursor: pointer; color: var(--muted); }
+  .tabs { display: flex; gap: 4px; padding: 12px 24px 0; border-bottom: 1px solid var(--line); }
+  .tabs .tab { background: none; color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 16px;
+    border-bottom: 2px solid transparent; }
+  .tabs .tab.active { color: var(--text); border-bottom-color: var(--chief); }
+  .hidden { display: none !important; }
+  #office-view { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+  /* Office scene */
+  #office { position: relative; max-width: 1100px; margin: 0 auto; border-radius: 14px; overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,.45); background: #EFE6D8; }
+  .office-svg { display: block; width: 100%; height: auto; }
+  .office-overlay { position: absolute; inset: 0; pointer-events: none; }
+  .ws { cursor: pointer; }
+  .ws .char { shape-rendering: crispEdges; }
+  .plate-name { font: 700 13px ui-sans-serif, system-ui, "Segoe UI", sans-serif; fill: #2A2320; }
+  .plate-model { font: 8.5px ui-monospace, Consolas, monospace; fill: #8A7A66; }
+  .wb-title { font: 700 17px ui-sans-serif, system-ui, sans-serif; fill: #2A2320; }
+  .wb-line { font: 13px "Segoe Print", "Comic Sans MS", cursive; fill: #33415C; }
+  .sign-a { font: 800 19px ui-sans-serif, system-ui, sans-serif; fill: #F6EFE3; letter-spacing: .12em; }
+  .sign-b { font: 700 9.5px ui-sans-serif, system-ui, sans-serif; fill: #D97757; letter-spacing: .2em; }
+  .dot { fill: #A99C8A; }
+  .ws.working .dot { fill: #F2A93B; animation: pulse 1s ease-in-out infinite; }
+  .ws.done .dot { fill: #3FAE6E; }
+  .ws.error .dot { fill: #E05555; }
+  .screen-bg { fill: #1A1F2B; }
+  .ws.working .screen-bg { fill: #0E1726; }
+  .screen { opacity: .28; transition: opacity .4s; }
+  .ws.working .screen, .ws.done .screen { opacity: 1; }
+  .badge { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  .ws.done .done-badge, .ws.error .err-badge { opacity: 1; animation: popin .4s cubic-bezier(.3,1.6,.6,1); }
+  .bob { transform-box: fill-box; animation: bob 3.2s ease-in-out infinite; }
+  .ws.working .bob { animation: bob .45s ease-in-out infinite; }
+  .ws.done .bob { animation: hop .5s ease-in-out 3; }
+  .ws.error .bob { animation: shake .4s ease-in-out 3; }
+  .eyes { transform-box: fill-box; transform-origin: center; animation: blink 4.5s infinite; }
+  .arm-a { opacity: 0; }
+  .ws.working .arm-a { animation: armA .3s steps(1) infinite; }
+  .ws.working .arm-b { animation: armB .3s steps(1) infinite; }
+  .steam { animation: steam 2.4s ease-in-out infinite; }
+  .anim { transform-box: fill-box; animation-play-state: paused !important; }
+  .ws.working .anim { animation-play-state: running !important; }
+  .type { transform-origin: left; animation: type 2.4s ease-out infinite; }
+  .cursor { animation: blinkc 1s steps(1) infinite; }
+  .grow { transform-origin: bottom; animation: grow 1.6s ease-in-out infinite alternate; }
+  .scan { animation: scan 1.8s ease-in-out infinite alternate; }
+  .pop { transform-origin: center; animation: popheart 1.2s ease-in-out infinite; }
+  .tick { transform-origin: left; animation: type 1.6s ease-out infinite; }
+  .slide { animation: slide 2s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-3px); } }
+  @keyframes hop { 50% { transform: translateY(-12px); } }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  @keyframes blink { 0%, 95%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+  @keyframes armA { 0% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes armB { 0% { opacity: 0; } 50% { opacity: 1; } }
+  @keyframes steam { 0%, 100% { opacity: 0; transform: translateY(3px); } 50% { opacity: 1; transform: translateY(-2px); } }
+  @keyframes type { 0% { transform: scaleX(0); } 35%, 100% { transform: scaleX(1); } }
+  @keyframes blinkc { 50% { opacity: 0; } }
+  @keyframes grow { from { transform: scaleY(.35); } to { transform: scaleY(1); } }
+  @keyframes scan { from { transform: translateY(0); } to { transform: translateY(8px); } }
+  @keyframes popheart { 50% { transform: scale(1.5); } }
+  @keyframes slide { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @keyframes popin { from { transform: scale(0); } to { transform: scale(1); } }
+
+  .bubble { position: absolute; transform: translate(-50%, -100%) scale(.85); opacity: 0;
+    transition: opacity .25s, transform .25s; background: #fff; color: #2A2320; border-radius: 12px;
+    padding: 6px 10px; font-size: clamp(10px, 1.05vw, 12.5px); line-height: 1.35; width: max-content;
+    max-width: 24%; box-shadow: 0 4px 14px rgba(40,25,10,.25); display: flex; gap: 6px; }
+  .bubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -6px;
+    border: 6px solid transparent; border-bottom: 0; border-top-color: #fff; }
+  .bubble.show { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  .bubble.done { background: #E8F7EE; } .bubble.done::after { border-top-color: #E8F7EE; }
+  .bubble.error { background: #FDECEC; } .bubble.error::after { border-top-color: #FDECEC; }
+  .b-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* Agent cards under the scene */
+  #cards { max-width: 1100px; margin: 18px auto 0; display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .agent-card { display: flex; gap: 12px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px; transition: border-color .3s, box-shadow .3s; }
+  .agent-card.working { border-color: #F2A93B; }
+  .agent-card.done { border-color: var(--ok); }
+  .agent-card.error { border-color: var(--err); }
+  .agent-card.flash { box-shadow: 0 0 0 3px var(--chief); }
+  .card-avatar { width: 52px; height: 45px; flex: none; }
+  .card-body { min-width: 0; flex: 1; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .pill { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--line); color: var(--muted); }
+  .working .pill { background: #4A3A1C; color: #F2C14E; }
+  .done .pill { background: #1E3A2A; color: var(--ok); }
+  .error .pill { background: #432020; color: var(--err); }
+  .card-title { font-size: 12px; color: var(--muted); }
+  .card-now { font-size: 13px; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical; overflow: hidden; }
+  .card-log { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; color: var(--muted); }
+  .card-log li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  @media (prefers-reduced-motion: reduce) { *, .anim { animation: none !important; transition: none !important; } }
   @media (max-width: 1000px) { .app { grid-template-columns: 1fr; } aside, .activity { display: none; } }
 </style>
 </head>
@@ -62,7 +160,15 @@
     <div id="agents"></div>
   </aside>
   <main>
-    <div id="messages"></div>
+    <nav class="tabs">
+      <button class="tab active" data-view="office-view">Office</button>
+      <button class="tab" data-view="messages">Chat</button>
+    </nav>
+    <div id="office-view">
+      <div id="office"></div>
+      <div id="cards"></div>
+    </div>
+    <div id="messages" class="hidden"></div>
     <form id="form">
       <textarea id="input" placeholder="Tell the chief what you need…  (Enter to send, Shift+Enter for newline)"></textarea>
       <button id="send">Send</button>
@@ -73,6 +179,7 @@
     <div id="events"></div>
   </section>
 </div>
+<script src="/static/office.js"></script>
 <script>
 let sessionId = null;
 const $ = (id) => document.getElementById(id);
@@ -168,7 +275,12 @@ $("form").addEventListener("submit", (ev) => {
 $("input").addEventListener("keydown", (ev) => {
   if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("form").requestSubmit(); }
 });
+document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+  for (const id of ["office-view", "messages"]) $(id).classList.toggle("hidden", id !== tab.dataset.view);
+}));
 loadSidebar();
+fetch("/api/agents").then((r) => r.json()).then((roster) => Office.init($("office"), $("cards"), roster));
 </script>
 </body>
 </html>

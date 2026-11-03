@@ -68,6 +68,18 @@ def test_provider_error_is_reported_not_500(settings):
     assert r.json()["detail"] == "Insufficient credits"
 
 
+def test_chat_broadcasts_to_office_view(settings):
+    llm = FakeLLM({"You are the Chief": [LLMResponse(content="hello")]})
+    app = create_app(settings, llm)
+    hub = app.state.hub
+    with hub.subscribe() as queue:
+        TestClient(app).post("/api/chat", json={"message": "hi"})
+        seen = [queue.get_nowait()["type"] for _ in range(queue.qsize())]
+    assert seen == ["start", "reply"]
+    assert hub.latest["chief"]["text"] == "hello"
+    assert hub.snapshot()["stats"]["requests"] == 1
+
+
 def test_chat_stream_emits_reply(settings):
     llm = FakeLLM({"You are the Chief": [LLMResponse(content="streamed")]})
     client = TestClient(create_app(settings, llm))

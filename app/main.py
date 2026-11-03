@@ -4,11 +4,13 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from openai import APIError
 from pydantic import BaseModel
 
 from app.agents import Team
 from app.config import Settings, load_team
+from app.events import EventHub
 from app.llm import ChatModel, ModelRouter
 from app.memory import Memory
 from app.tools import Workspace, build_tools
@@ -27,8 +29,11 @@ def create_app(settings: Settings | None = None, llm: ChatModel | None = None) -
     team = Team(load_team(settings.agents_file), llm,
                 build_tools(Workspace(settings.workspace_dir)), settings)
     memory = Memory(settings.db_path)
+    hub = EventHub()
 
     app = FastAPI(title="Agent Team", version="0.1.0")
+    app.state.hub = hub
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     @app.exception_handler(APIError)
     async def model_error(_: Request, exc: APIError):
@@ -72,6 +77,41 @@ def create_app(settings: Settings | None = None, llm: ChatModel | None = None) -
         memory.delete_session(sid)
         return {"ok": True}
 
+    @app.get("/api/events")
+    async def events_stream(request: Request):
+        """Server-sent events: everything every agent does, across all requests."""
+        async def stream():
+            with hub.subscribe() as queue:
+                yield _sse(hub.snapshot())
+                while not await request.is_disconnected():
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=15)
+                    except TimeoutError:
+                        yield ": ping\n\n"
+                        continue
+                    yield _sse(event)
+
+        return StreamingResponse(stream(), media_type="text/event-stream")
+
+    async def run_turn(sid: str, message: str, history: list[dict], emit) -> str:
+        """Run one chat turn, persist it and broadcast it to the office view."""
+        events: list[dict] = []
+
+        async def tee(e: dict) -> None:
+            events.append(e)
+            hub.publish(e)
+            await emit(e)
+
+        hub.publish({"type": "start", "agent": "chief", "text": message})
+        try:
+            reply = await team.run(message, history, tee)
+        except Exception as e:
+            hub.publish({"type": "error", "agent": "chief", "text": str(e)})
+            raise
+        memory.add_message(sid, "assistant", reply, events)
+        hub.publish({"type": "reply", "agent": "chief", "text": reply})
+        return reply
+
     @app.post("/api/chat")
     async def chat(req: ChatRequest):
         """Blocking: returns the chief's final reply plus everything the team did."""
@@ -83,8 +123,7 @@ def create_app(settings: Settings | None = None, llm: ChatModel | None = None) -
             events.append(e)
 
         memory.add_message(sid, "user", req.message)
-        reply = await team.run(req.message, history, emit)
-        memory.add_message(sid, "assistant", reply, events)
+        reply = await run_turn(sid, req.message, history, emit)
         return {"session_id": sid, "reply": reply, "events": events}
 
     @app.post("/api/chat/stream")
@@ -93,16 +132,10 @@ def create_app(settings: Settings | None = None, llm: ChatModel | None = None) -
         sid = _session(req)
         history = memory.history(sid)
         queue: asyncio.Queue[dict | None] = asyncio.Queue()
-        events: list[dict] = []
-
-        async def emit(e: dict) -> None:
-            events.append(e)
-            await queue.put(e)
 
         async def work():
             try:
-                reply = await team.run(req.message, history, emit)
-                memory.add_message(sid, "assistant", reply, events)
+                reply = await run_turn(sid, req.message, history, queue.put)
                 await queue.put({"type": "reply", "agent": "chief", "text": reply})
             except Exception as e:
                 await queue.put({"type": "error", "agent": "chief", "text": str(e)})
