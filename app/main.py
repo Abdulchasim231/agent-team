@@ -2,8 +2,9 @@ import asyncio
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from openai import APIError
 from pydantic import BaseModel
 
 from app.agents import Team
@@ -28,6 +29,12 @@ def create_app(settings: Settings | None = None, llm: ChatModel | None = None) -
     memory = Memory(settings.db_path)
 
     app = FastAPI(title="Agent Team", version="0.1.0")
+
+    @app.exception_handler(APIError)
+    async def model_error(_: Request, exc: APIError):
+        # Provider problems (no credits, bad key, model down) are not server bugs.
+        status = getattr(exc, "status_code", None) or 502
+        return JSONResponse({"error": "model_provider", "detail": exc.message}, status_code=status)
 
     def _session(req: ChatRequest) -> str:
         if req.session_id:

@@ -52,6 +52,22 @@ def test_chat_api_persists_sessions(settings):
     assert client.post("/api/chat", json={"message": "x", "session_id": "nope"}).status_code == 404
 
 
+def test_provider_error_is_reported_not_500(settings):
+    import httpx
+    from openai import APIStatusError
+
+    class BrokeLLM(FakeLLM):
+        async def chat(self, model, messages, tools=None):
+            req = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+            resp = httpx.Response(402, request=req)
+            raise APIStatusError("Insufficient credits", response=resp, body=None)
+
+    client = TestClient(create_app(settings, BrokeLLM({})))
+    r = client.post("/api/chat", json={"message": "hi"})
+    assert r.status_code == 402
+    assert r.json()["detail"] == "Insufficient credits"
+
+
 def test_chat_stream_emits_reply(settings):
     llm = FakeLLM({"You are the Chief": [LLMResponse(content="streamed")]})
     client = TestClient(create_app(settings, llm))
