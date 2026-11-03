@@ -1,6 +1,6 @@
 # Agent Team
 
-A local, multi-model AI agent backend. You talk to one **Chief** agent; it splits your request into tasks and hands them to a team of specialists. Each specialist can run on a different model: local through **Ollama**, or in the cloud through **OpenRouter**.
+A local, multi-model AI agent backend. You talk to one **Chief** agent; it splits your request into tasks and hands them to a team of specialists. Each specialist can run on a different model: local through **Ollama**, or in the cloud through **Groq, Gemini, Cerebras, Mistral, GitHub Models or OpenRouter**.
 
 ```
             you
@@ -14,7 +14,9 @@ A local, multi-model AI agent backend. You talk to one **Chief** agent; it split
 ```
 
 - **Multi-model**: every agent picks its own model in `agents.yaml`. You can mix Claude, DeepSeek, Gemini, Qwen and local models.
-- **Works offline**: without an OpenRouter key, every agent falls back to your local Ollama model.
+- **Runs on free tiers**: each agent has a fallback chain across providers. When one hits its rate limit, the agent switches to the next and skips the limited model for a while.
+- **Works offline**: with no cloud keys, every agent falls back to your local Ollama model.
+- **Live office**: the dashboard shows every agent as a pixel character at its desk, with what it is working on right now.
 - **Parallel work**: the Chief can run independent tasks at the same time.
 - **Tools**: a sandboxed shared workspace (read/write/list files), web search and URL fetch.
 - **Memory**: sessions and team activity are stored in SQLite.
@@ -34,13 +36,35 @@ uv sync
 copy .env.example .env
 ```
 
-Edit `.env`: set `LOCAL_MODEL` to a model from `ollama list`, and optionally add `OPENROUTER_API_KEY`.
+Edit `.env`: add keys for the free providers you want (links are in the file) and set `LOCAL_MODEL` to a model from `ollama list`.
 
 ```bash
 uv run uvicorn app.main:create_app --factory --reload --port 8000
 ```
 
 Open http://localhost:8000.
+
+## Free providers and fallback chains
+
+| Provider | Get a key | Notes |
+|---|---|---|
+| Groq | console.groq.com/keys | Fast; the most generous free tier |
+| Gemini | aistudio.google.com/apikey | Flash models are free |
+| Cerebras | cloud.cerebras.ai | Very fast; smaller context on free tier |
+| Mistral | console.mistral.ai | Free "Experiment" plan; Codestral for code |
+| GitHub Models | github.com/settings/tokens | Fine-grained token with "Models: read" |
+| OpenRouter | openrouter.ai/keys | `:free` models without credits |
+
+Free limits change often; check each provider's dashboard. In `agents.yaml`, give an agent a list of models and the router tries them in order:
+
+```yaml
+    model:
+      - groq/openai/gpt-oss-120b
+      - gemini/gemini-flash-latest
+      - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+```
+
+Providers without a key are skipped. On a rate limit, missing credits, an unknown model, a timeout or a server error, the next model is tried. Rate-limited models are skipped for `RATE_LIMIT_COOLDOWN` seconds, or for as long as the provider's `Retry-After` header says. To list the model IDs a provider offers: `GET /api/providers/groq/models`.
 
 ## Choosing local models
 

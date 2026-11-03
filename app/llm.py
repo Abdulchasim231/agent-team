@@ -1,21 +1,48 @@
-"""Model router: one interface for local (Ollama) and cloud (OpenRouter) models.
+"""Model router: one interface for local and cloud models, with automatic fallback.
 
-Both providers speak the OpenAI chat-completions protocol, so a single client type
-covers them; only base URL, key and concurrency differ.
+Every supported provider speaks the OpenAI chat-completions protocol, so a single client
+type covers them; only base URL, key and concurrency differ.
+
+An agent's model can be a single string or a list. With a list, the router tries each
+model in order and moves on when one is rate limited, out of credits, down or unknown.
+Rate-limited models are skipped for a cool-down period, which spreads load across
+several free tiers.
 """
 
 import asyncio
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
 import httpx
-from openai import AsyncOpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
 from app.config import Settings
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1"
 _THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+# Statuses where another model may well succeed.
+_FALLBACK_STATUSES = {402, 404, 408, 413, 429, 500, 502, 503, 504}
+_COOLDOWN_STATUSES = {402, 429}
+
+
+@dataclass(frozen=True)
+class Provider:
+    base_url: str
+    key_setting: str  # Settings attribute holding the API key ("" for none needed)
+    concurrency: int = 8
+
+
+PROVIDERS = {
+    "ollama": Provider("", "", 1),  # base URL and concurrency come from settings
+    "openrouter": Provider("https://openrouter.ai/api/v1", "openrouter_api_key"),
+    "groq": Provider("https://api.groq.com/openai/v1", "groq_api_key"),
+    "gemini": Provider("https://generativelanguage.googleapis.com/v1beta/openai/",
+                       "gemini_api_key"),
+    "cerebras": Provider("https://api.cerebras.ai/v1", "cerebras_api_key"),
+    "mistral": Provider("https://api.mistral.ai/v1", "mistral_api_key"),
+    "github": Provider("https://models.github.ai/inference", "github_token"),
+}
 
 
 @dataclass
@@ -32,11 +59,20 @@ class LLMResponse:
     model: str = ""
 
 
+class AllModelsFailed(Exception):
+    def __init__(self, errors: list[str]):
+        self.errors = errors
+        super().__init__("All models failed: " + " | ".join(errors))
+
+
+ModelSpec = str | list[str]
+
+
 class ChatModel(Protocol):
-    def resolve(self, model: str) -> str: ...
+    def resolve(self, model: ModelSpec) -> str: ...
 
     async def chat(
-        self, model: str, messages: list[dict], tools: list[dict] | None = None
+        self, model: ModelSpec, messages: list[dict], tools: list[dict] | None = None
     ) -> LLMResponse: ...
 
 
@@ -45,43 +81,60 @@ class ModelRouter:
         self.settings = settings
         self._clients: dict[str, AsyncOpenAI] = {}
         self._limits = {
-            "ollama": asyncio.Semaphore(settings.ollama_concurrency),
-            "openrouter": asyncio.Semaphore(settings.openrouter_concurrency),
+            name: asyncio.Semaphore(
+                settings.ollama_concurrency if name == "ollama"
+                else settings.openrouter_concurrency if name == "openrouter"
+                else p.concurrency
+            )
+            for name, p in PROVIDERS.items()
         }
+        self._cooldown: dict[str, float] = {}  # model -> monotonic time it may be retried
 
-    def resolve(self, model: str) -> str:
-        """Map a config model string to a concrete 'provider/name', applying fallbacks."""
+    def _key(self, provider: str) -> str:
+        attr = PROVIDERS[provider].key_setting
+        return getattr(self.settings, attr) if attr else "ollama"
+
+    def available(self, provider: str) -> bool:
+        return bool(self._key(provider))
+
+    def _expand(self, model: str) -> str:
         if model == "local":
             return f"ollama/{self.settings.local_model}"
         provider, _, name = model.partition("/")
-        if provider not in self._limits or not name:
-            raise ValueError(f"Unknown model '{model}'. Use local, ollama/... or openrouter/...")
-        if provider == "openrouter" and not self.settings.openrouter_api_key:
-            return f"ollama/{self.settings.local_model}"
+        if provider not in PROVIDERS or not name:
+            known = ", ".join(PROVIDERS)
+            raise ValueError(f"Unknown model '{model}'. Use local or <provider>/<model> ({known})")
         return model
+
+    def candidates(self, model: ModelSpec) -> list[str]:
+        """Concrete models to try, in order: configured, keyed providers only."""
+        specs = [model] if isinstance(model, str) else list(model)
+        out = []
+        for spec in specs:
+            full = self._expand(spec)
+            if self.available(full.partition("/")[0]) and full not in out:
+                out.append(full)
+        return out or [f"ollama/{self.settings.local_model}"]
+
+    def resolve(self, model: ModelSpec) -> str:
+        """The model that would be tried first right now."""
+        cands = self.candidates(model)
+        now = time.monotonic()
+        return next((c for c in cands if self._cooldown.get(c, 0) <= now), cands[0])
 
     def _client(self, provider: str) -> AsyncOpenAI:
         if provider not in self._clients:
-            if provider == "ollama":
-                self._clients[provider] = AsyncOpenAI(
-                    base_url=f"{self.settings.ollama_base_url.rstrip('/')}/v1",
-                    api_key="ollama",
-                    timeout=self.settings.request_timeout,
-                )
-            else:
-                self._clients[provider] = AsyncOpenAI(
-                    base_url=OPENROUTER_URL,
-                    api_key=self.settings.openrouter_api_key,
-                    timeout=self.settings.request_timeout,
-                    default_headers={"X-Title": "Agent Team"},
-                )
+            base = (f"{self.settings.ollama_base_url.rstrip('/')}/v1" if provider == "ollama"
+                    else PROVIDERS[provider].base_url)
+            headers = {"X-Title": "Agent Team"} if provider == "openrouter" else None
+            self._clients[provider] = AsyncOpenAI(
+                base_url=base, api_key=self._key(provider),
+                timeout=self.settings.request_timeout, default_headers=headers,
+            )
         return self._clients[provider]
 
-    async def chat(
-        self, model: str, messages: list[dict], tools: list[dict] | None = None
-    ) -> LLMResponse:
-        resolved = self.resolve(model)
-        provider, _, name = resolved.partition("/")
+    async def _chat_one(self, full: str, messages: list[dict], tools: list[dict] | None):
+        provider, _, name = full.partition("/")
         kwargs: dict = {"model": name, "messages": messages}
         if tools:
             kwargs["tools"] = tools
@@ -93,10 +146,42 @@ class ModelRouter:
             for c in (msg.tool_calls or [])
         ]
         content = _THINK_RE.sub("", msg.content or "").strip()
-        return LLMResponse(content=content, tool_calls=calls, model=resolved)
+        return LLMResponse(content=content, tool_calls=calls, model=full)
+
+    def _cool_down(self, full: str, err: APIStatusError) -> None:
+        try:
+            wait = float(err.response.headers.get("retry-after", ""))
+        except ValueError:
+            wait = self.settings.rate_limit_cooldown
+        self._cooldown[full] = time.monotonic() + min(max(wait, 5), 3600)
+
+    async def chat(
+        self, model: ModelSpec, messages: list[dict], tools: list[dict] | None = None
+    ) -> LLMResponse:
+        cands = self.candidates(model)
+        now = time.monotonic()
+        # Cooling-down models go last instead of being dropped: better a slow retry than none.
+        ordered = sorted(cands, key=lambda c: self._cooldown.get(c, 0) > now)
+        errors = []
+        for full in ordered:
+            try:
+                return await self._chat_one(full, messages, tools)
+            except APIStatusError as e:
+                if e.status_code not in _FALLBACK_STATUSES:
+                    raise
+                if e.status_code in _COOLDOWN_STATUSES:
+                    self._cool_down(full, e)
+                errors.append(f"{full}: {e.status_code} {e.message}")
+            except (APIConnectionError, APITimeoutError) as e:
+                errors.append(f"{full}: {type(e).__name__}")
+        raise AllModelsFailed(errors)
 
     async def health(self) -> dict:
-        status = {"openrouter_key": bool(self.settings.openrouter_api_key), "ollama": False}
+        status = {
+            "providers": {p: self.available(p) for p in PROVIDERS if p != "ollama"},
+            "openrouter_key": self.available("openrouter"),
+            "ollama": False,
+        }
         try:
             async with httpx.AsyncClient(timeout=3) as client:
                 r = await client.get(f"{self.settings.ollama_base_url.rstrip('/')}/api/tags")
@@ -106,3 +191,10 @@ class ModelRouter:
         except httpx.HTTPError:
             pass
         return status
+
+    async def list_models(self, provider: str) -> list[str]:
+        """Model IDs a provider currently offers, for picking chains in agents.yaml."""
+        if provider not in PROVIDERS or not self.available(provider):
+            return []
+        page = await self._client(provider).models.list()
+        return sorted(m.id for m in page.data)

@@ -1,20 +1,28 @@
 # The team. Edit freely: add agents, swap models, change prompts.
 #
 # Model format:
-#   local                         -> the Ollama model set in LOCAL_MODEL (.env)
-#   ollama/<model>                -> any model you have pulled in Ollama
-#   openrouter/<vendor>/<model>   -> any model on openrouter.ai (needs OPENROUTER_API_KEY)
+#   local                     -> the Ollama model set in LOCAL_MODEL (.env)
+#   <provider>/<model>        -> providers: ollama, openrouter, groq, gemini, cerebras,
+#                                mistral, github (keys in .env)
 #
-# If OPENROUTER_API_KEY is missing, OpenRouter agents fall back to the local model,
-# so the whole team still runs fully offline.
+# A model can be a list: a fallback chain. The router tries the models in order and moves
+# on when one is rate limited, out of credits, down or unknown. Providers without a key
+# in .env are skipped. If nothing is usable, the agent falls back to the local model.
 #
-# The defaults are free OpenRouter models (":free"): no credits needed, but rate limited
-# (about 50 requests/day without purchased credits). Paid upgrades are noted per agent.
+# All defaults below are free tiers. Each agent starts on a different provider so one
+# provider's daily limit does not stop the whole team. To see which model IDs a provider
+# offers: GET /api/providers/<provider>/models
+# Paid upgrades: openrouter/anthropic/claude-sonnet-5.5, openrouter/deepseek/deepseek-v4-pro
 
 chief:
   name: chief
   title: Chief of Staff
-  model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free  # paid: openrouter/anthropic/claude-sonnet-5.5
+  model:
+    - groq/openai/gpt-oss-120b
+    - gemini/gemini-flash-latest
+    - cerebras/gpt-oss-120b
+    - github/openai/gpt-4.1
+    - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
   prompt: |
     You are the Chief, the single point of contact for the user. You lead a team of
     specialist AI agents. Your job:
@@ -30,7 +38,11 @@ chief:
 specialists:
   - name: coder
     title: Senior Software Engineer
-    model: openrouter/cohere/north-mini-code:free  # paid: openrouter/deepseek/deepseek-v4-pro
+    model:
+      - mistral/codestral-latest
+      - groq/qwen/qwen3-32b
+      - github/openai/gpt-4.1
+      - openrouter/cohere/north-mini-code:free
     tools: [list_files, read_file, write_file]
     prompt: |
       You are a senior software engineer. Write clean, working, production-quality code.
@@ -39,7 +51,10 @@ specialists:
 
   - name: researcher
     title: Research Analyst
-    model: openrouter/nvidia/nemotron-3.5-lightning:free  # paid: openrouter/google/gemini-3.8-flash
+    model:
+      - gemini/gemini-flash-latest
+      - groq/llama-3.3-70b-versatile
+      - openrouter/nvidia/nemotron-3.5-lightning:free
     tools: [web_search, fetch_url, write_file]
     prompt: |
       You are a meticulous research analyst. Search the web, open the most relevant sources,
@@ -48,7 +63,11 @@ specialists:
 
   - name: marketer
     title: Marketing & Content Strategist
-    model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free  # paid: openrouter/anthropic/claude-haiku-5.5
+    model:
+      - groq/llama-3.3-70b-versatile
+      - mistral/mistral-small-latest
+      - gemini/gemini-flash-lite-latest
+      - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
     tools: [write_file, read_file]
     prompt: |
       You are a marketing and content strategist for a digital agency. You write copy,
@@ -57,7 +76,11 @@ specialists:
 
   - name: analyst
     title: Business & Data Analyst
-    model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free  # offline: local
+    model:
+      - cerebras/gpt-oss-120b
+      - groq/openai/gpt-oss-120b
+      - gemini/gemini-flash-latest
+      - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
     tools: [read_file, list_files, write_file]
     prompt: |
       You are a business and data analyst. You structure problems, build plans, calculate,
@@ -65,7 +88,11 @@ specialists:
 
   - name: reviewer
     title: Quality Reviewer
-    model: openrouter/nvidia/nemotron-3.5-lightning:free  # offline: local
+    model:
+      - groq/openai/gpt-oss-20b
+      - mistral/mistral-small-latest
+      - gemini/gemini-flash-lite-latest
+      - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
     tools: [read_file, list_files]
     prompt: |
       You are a strict quality reviewer. Check code, texts and plans for errors, gaps,

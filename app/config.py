@@ -8,26 +8,36 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # Cloud providers. Any left empty are skipped in model chains.
     openrouter_api_key: str = ""
+    groq_api_key: str = ""
+    gemini_api_key: str = ""
+    cerebras_api_key: str = ""
+    mistral_api_key: str = ""
+    github_token: str = ""
+
     ollama_base_url: str = "http://localhost:11434"
     local_model: str = "qwen3:8b"
     # Max concurrent requests per provider. Local models are slow in parallel.
     ollama_concurrency: int = 1
     openrouter_concurrency: int = 8
+    # Seconds to skip a model after it hits a rate limit (unless it sends Retry-After).
+    rate_limit_cooldown: float = 60.0
 
     agents_file: Path = Path("agents.yaml")
     workspace_dir: Path = Path("workspace")
     db_path: Path = Path("data/agent_team.db")
 
     max_agent_steps: int = 10
-    request_timeout: float = 300.0
+    # Per model call. A stuck free model times out and the next one in the chain is tried.
+    request_timeout: float = 120.0
 
 
 @dataclass
 class AgentSpec:
     name: str
     title: str
-    model: str
+    model: str | list[str]  # one model, or a fallback chain tried in order
     prompt: str
     tools: list[str] = field(default_factory=list)
 

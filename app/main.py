@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from app.agents import Team
 from app.config import Settings, load_team
 from app.events import EventHub
-from app.llm import ChatModel, ModelRouter
+from app.llm import AllModelsFailed, ChatModel, ModelRouter
 from app.memory import Memory
 from app.tools import Workspace, build_tools
 
@@ -41,6 +41,10 @@ def create_app(settings: Settings | None = None, llm: ChatModel | None = None) -
         status = getattr(exc, "status_code", None) or 502
         return JSONResponse({"error": "model_provider", "detail": exc.message}, status_code=status)
 
+    @app.exception_handler(AllModelsFailed)
+    async def all_models_failed(_: Request, exc: AllModelsFailed):
+        return JSONResponse({"error": "all_models_failed", "detail": exc.errors}, status_code=503)
+
     def _session(req: ChatRequest) -> str:
         if req.session_id:
             if not memory.session_exists(req.session_id):
@@ -57,6 +61,13 @@ def create_app(settings: Settings | None = None, llm: ChatModel | None = None) -
         if isinstance(llm, ModelRouter):
             return {"ok": True, **(await llm.health())}
         return {"ok": True}
+
+    @app.get("/api/providers/{provider}/models")
+    async def provider_models(provider: str):
+        """Model IDs a configured provider offers right now (to build chains in agents.yaml)."""
+        if not isinstance(llm, ModelRouter):
+            return []
+        return await llm.list_models(provider)
 
     @app.get("/api/agents")
     async def agents():
