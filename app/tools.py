@@ -54,6 +54,8 @@ class Workspace:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path(self, rel: str) -> Path:
+        # Models often write "workspace/x.py" meaning the workspace root, not a subfolder.
+        rel = rel.replace("\\", "/").removeprefix("./").removeprefix(f"{self.root.name}/")
         target = (self.root / rel).resolve()
         if not target.is_relative_to(self.root):
             raise PermissionError(f"Path '{rel}' is outside the workspace")

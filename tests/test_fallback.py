@@ -75,6 +75,42 @@ async def test_all_failing_raises_with_every_reason():
     assert len(exc.value.errors) == 2 and "404" in exc.value.errors[1]
 
 
+async def test_bad_tool_call_is_retried_on_same_model():
+    class Flaky(ScriptedRouter):
+        async def _chat_one(self, full, messages, tools):
+            self.tried.append(full)
+            if len(self.tried) == 1:
+                err = status_error(400)
+                err.message = "Tool call validation failed: attempted to call tool 'x'"
+                raise err
+            return LLMResponse(content="second try", model=full)
+
+    router = Flaky(keys(groq_api_key="x"), {})
+    resp = await router.chat(["groq/a"], [])
+    assert resp.content == "second try" and router.tried == ["groq/a", "groq/a"]
+
+
+async def test_waits_and_retries_when_everything_is_rate_limited(monkeypatch):
+    slept = []
+
+    async def fake_sleep(s):
+        slept.append(s)
+
+    monkeypatch.setattr("app.llm.asyncio.sleep", fake_sleep)
+
+    class Recovers(ScriptedRouter):
+        async def _chat_one(self, full, messages, tools):
+            self.tried.append(full)
+            if len(self.tried) == 1:
+                raise status_error(429, {"retry-after": "7"})
+            return LLMResponse(content="after waiting", model=full)
+
+    router = Recovers(keys(groq_api_key="x"), {})
+    resp = await router.chat(["groq/a"], [])
+    assert resp.content == "after waiting"
+    assert len(slept) == 1 and 5 < slept[0] <= 7
+
+
 async def test_auth_errors_are_not_hidden_by_fallback():
     router = ScriptedRouter(keys(groq_api_key="bad", gemini_api_key="y"),
                             {"groq/a": status_error(401), "gemini/b": "ok"})

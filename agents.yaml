@@ -21,6 +21,7 @@ chief:
     - groq/openai/gpt-oss-120b
     - gemini/gemini-flash-latest
     - cerebras/gpt-oss-120b
+    - groq/qwen/qwen3.8-27b
     - github/openai/gpt-4.1
     - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
   prompt: |
@@ -40,7 +41,8 @@ specialists:
     title: Senior Software Engineer
     model:
       - mistral/codestral-latest
-      - groq/qwen/qwen3-32b
+      - groq/qwen/qwen3.8-27b
+      - groq/openai/gpt-oss-120b
       - github/openai/gpt-4.1
       - openrouter/cohere/north-mini-code:free
     tools: [list_files, read_file, write_file]
@@ -53,7 +55,8 @@ specialists:
     title: Research Analyst
     model:
       - gemini/gemini-flash-latest
-      - groq/llama-3.3-70b-versatile
+      - groq/openai/gpt-oss-20b
+      - groq/qwen/qwen3.8-27b
       - openrouter/nvidia/nemotron-3.5-lightning:free
     tools: [web_search, fetch_url, write_file]
     prompt: |
@@ -64,8 +67,9 @@ specialists:
   - name: marketer
     title: Marketing & Content Strategist
     model:
-      - groq/llama-3.3-70b-versatile
       - mistral/mistral-small-latest
+      - groq/openai/gpt-oss-120b
+      - groq/openai/gpt-oss-20b
       - gemini/gemini-flash-lite-latest
       - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
     tools: [write_file, read_file]
@@ -79,6 +83,7 @@ specialists:
     model:
       - cerebras/gpt-oss-120b
       - groq/openai/gpt-oss-120b
+      - groq/qwen/qwen3.8-27b
       - gemini/gemini-flash-latest
       - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
     tools: [read_file, list_files, write_file]
@@ -91,6 +96,7 @@ specialists:
     model:
       - groq/openai/gpt-oss-20b
       - mistral/mistral-small-latest
+      - groq/qwen/qwen3.8-27b
       - gemini/gemini-flash-lite-latest
       - openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
     tools: [read_file, list_files]

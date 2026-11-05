@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     openrouter_concurrency: int = 8
     # Seconds to skip a model after it hits a rate limit (unless it sends Retry-After).
     rate_limit_cooldown: float = 60.0
+    # When every model in a chain is rate limited, wait at most this long and retry once.
+    max_rate_limit_wait: float = 30.0
 
     agents_file: Path = Path("agents.yaml")
     workspace_dir: Path = Path("workspace")

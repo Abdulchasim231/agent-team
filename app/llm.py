@@ -68,6 +68,11 @@ class AllModelsFailed(Exception):
 ModelSpec = str | list[str]
 
 
+def _bad_tool_call(err: APIStatusError) -> bool:
+    msg = str(err.message).lower()
+    return err.status_code == 400 and ("tool call validation" in msg or "tool_use_failed" in msg)
+
+
 class ChatModel(Protocol):
     def resolve(self, model: ModelSpec) -> str: ...
 
@@ -159,22 +164,43 @@ class ModelRouter:
         self, model: ModelSpec, messages: list[dict], tools: list[dict] | None = None
     ) -> LLMResponse:
         cands = self.candidates(model)
-        now = time.monotonic()
-        # Cooling-down models go last instead of being dropped: better a slow retry than none.
-        ordered = sorted(cands, key=lambda c: self._cooldown.get(c, 0) > now)
-        errors = []
-        for full in ordered:
-            try:
-                return await self._chat_one(full, messages, tools)
-            except APIStatusError as e:
-                if e.status_code not in _FALLBACK_STATUSES:
-                    raise
-                if e.status_code in _COOLDOWN_STATUSES:
-                    self._cool_down(full, e)
-                errors.append(f"{full}: {e.status_code} {e.message}")
-            except (APIConnectionError, APITimeoutError) as e:
-                errors.append(f"{full}: {type(e).__name__}")
+        errors: list[str] = []
+        for round_ in range(2):
+            now = time.monotonic()
+            # Cooling-down models go last instead of being dropped: better a slow retry than none.
+            ordered = sorted(cands, key=lambda c: self._cooldown.get(c, 0) > now)
+            only_rate_limited = True
+            for full in ordered:
+                try:
+                    return await self._chat_one_retrying(full, messages, tools)
+                except APIStatusError as e:
+                    if e.status_code not in _FALLBACK_STATUSES and not _bad_tool_call(e):
+                        raise
+                    if e.status_code in _COOLDOWN_STATUSES:
+                        self._cool_down(full, e)
+                    else:
+                        only_rate_limited = False
+                    errors.append(f"{full}: {e.status_code} {e.message}")
+                except (APIConnectionError, APITimeoutError) as e:
+                    only_rate_limited = False
+                    errors.append(f"{full}: {type(e).__name__}")
+            # Every model is merely rate limited: wait for the first to free up, then retry once.
+            if round_ == 0 and only_rate_limited:
+                wait = min(self._cooldown.get(c, 0) for c in cands) - time.monotonic()
+                await asyncio.sleep(min(max(wait, 1), self.settings.max_rate_limit_wait))
+                continue
+            break
         raise AllModelsFailed(errors)
+
+    async def _chat_one_retrying(self, full, messages, tools):
+        # Some providers (Groq) reject a response in which the model called a tool it was not
+        # given. Models are non-deterministic, so one more try usually works.
+        try:
+            return await self._chat_one(full, messages, tools)
+        except APIStatusError as e:
+            if not _bad_tool_call(e):
+                raise
+            return await self._chat_one(full, messages, tools)
 
     async def health(self) -> dict:
         status = {

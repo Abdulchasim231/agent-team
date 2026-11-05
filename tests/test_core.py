@@ -29,6 +29,9 @@ async def test_workspace_blocks_path_escape(tmp_path):
     assert await tools["list_files"].fn() == "a/b.txt"
     with pytest.raises(PermissionError):
         await tools["read_file"].fn(path="../secret.txt")
+    # "ws/..." (the workspace folder's own name) means the workspace root.
+    await tools["write_file"].fn(path="ws/c.txt", content="x")
+    assert (tmp_path / "ws" / "c.txt").exists()
 
 
 def test_html_to_text():
